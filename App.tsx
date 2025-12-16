@@ -161,7 +161,7 @@ const App: React.FC = () => {
   // --- Feedback View ---
   if (appState === AppState.FEEDBACK && feedback) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6 md:p-12 overflow-y-auto">
+      <div className="h-full bg-slate-50 p-6 md:p-12 overflow-y-auto">
         <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           <div className="bg-teal-700 p-8 text-white">
             <div className="flex items-center justify-between mb-4">

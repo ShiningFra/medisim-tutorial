@@ -52,7 +52,7 @@ export const QuizSection: React.FC<QuizSectionProps> = ({ onBack }) => {
   const currentQ = questions[activeQuestion];
 
   return (
-    <div className="max-w-3xl mx-auto p-8 h-full">
+    <div className="max-w-3xl mx-auto p-8 h-full overflow-y-auto">
       <button 
         onClick={onBack}
         className="flex items-center text-slate-500 hover:text-teal-600 mb-8 transition-colors font-medium"
