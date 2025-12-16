@@ -1,0 +1,5 @@
+{
+  "name": "MediSim Tutor",
+  "description": "Un Système Tutoriel Intelligent (STI) interactif pour la formation médicale. Les étudiants diagnostiquent des patients virtuels propulsés par l'IA et reçoivent des retours pédagogiques détaillés.",
+  "requestFramePermissions": []
+}
