@@ -33,17 +33,22 @@ export interface Message {
   isThinking?: boolean;
 }
 
-export interface ExamResult {
-  id: string;
+export interface UserProfile {
   name: string;
-  result: string;
-  timestamp: Date;
+  level: string; // ex: "Externe", "Interne", "Résident"
+  xp: number;
+  maxXp: number;
+  casesCompleted: number;
+  averageScore: number;
 }
 
 export enum AppState {
-  DASHBOARD,
-  CONSULTATION,
-  FEEDBACK
+  DASHBOARD_HOME,    // Le nouveau hub central
+  CASE_SELECTION,    // La liste des cas (ancien dashboard)
+  CONSULTATION,      // Le chat
+  FEEDBACK,          // Résultats
+  QUIZ_SECTION,      // Nouvelle section
+  COURSE_SECTION     // Nouvelle section
 }
 
 export interface DiagnosisSubmission {

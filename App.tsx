@@ -1,14 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { CLINICAL_CASES } from './constants';
-import { ClinicalCase, Message, AppState, DiagnosisSubmission, TutorFeedback } from './types';
+import { ClinicalCase, Message, AppState, DiagnosisSubmission, TutorFeedback, UserProfile } from './types';
 import { geminiService } from './services/geminiService';
 import { Dashboard } from './components/Dashboard';
+import { CaseSelection } from './components/CaseSelection';
+import { QuizSection } from './components/QuizSection';
+import { CourseSection } from './components/CourseSection';
 import { ChatInterface } from './components/ChatInterface';
 import { VitalsPanel } from './components/VitalsPanel';
 import { Stethoscope, ClipboardCheck, ArrowLeft, SendHorizontal, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>(AppState.DASHBOARD);
+  // Navigation State
+  const [appState, setAppState] = useState<AppState>(AppState.DASHBOARD_HOME);
+  
+  // User Profile State (Mock data for demo)
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: "Étudiant",
+    level: "Externe (4ème année)",
+    xp: 350,
+    maxXp: 1000,
+    casesCompleted: 3,
+    averageScore: 72
+  });
+
+  // Clinical Case State
   const [currentCase, setCurrentCase] = useState<ClinicalCase | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -22,6 +38,14 @@ const App: React.FC = () => {
   // Feedback State
   const [feedback, setFeedback] = useState<TutorFeedback | null>(null);
 
+  // --- Navigation Handlers ---
+
+  const handleNavigateFromDashboard = (destination: 'cases' | 'quiz' | 'courses') => {
+    if (destination === 'cases') setAppState(AppState.CASE_SELECTION);
+    if (destination === 'quiz') setAppState(AppState.QUIZ_SECTION);
+    if (destination === 'courses') setAppState(AppState.COURSE_SECTION);
+  };
+
   const handleSelectCase = (selectedCase: ClinicalCase) => {
     setCurrentCase(selectedCase);
     setAppState(AppState.CONSULTATION);
@@ -34,7 +58,7 @@ const App: React.FC = () => {
     // Initialize Gemini
     geminiService.initializeCase(selectedCase);
     
-    // Initial message simulating patient entering
+    // Initial message
     setMessages([{
       id: 'init',
       role: 'model',
@@ -42,6 +66,18 @@ const App: React.FC = () => {
       timestamp: new Date()
     }]);
   };
+
+  const handleBackToDashboard = () => {
+    setAppState(AppState.DASHBOARD_HOME);
+    setCurrentCase(null);
+  };
+
+  const handleBackToCaseSelection = () => {
+    setAppState(AppState.CASE_SELECTION);
+    setCurrentCase(null);
+  };
+
+  // --- Chat & Diagnosis Handlers ---
 
   const handleSendMessage = async (text: string) => {
     const newUserMsg: Message = {
@@ -94,19 +130,35 @@ const App: React.FC = () => {
     setFeedback(feedbackResult);
     setAppState(AppState.FEEDBACK);
     setIsSubmitting(false);
-  };
 
-  const goBackToDashboard = () => {
-    setAppState(AppState.DASHBOARD);
-    setCurrentCase(null);
+    // Update User Profile with Mock Logic
+    setUserProfile(prev => ({
+        ...prev,
+        xp: prev.xp + 100 + (feedbackResult.score > 80 ? 50 : 0),
+        casesCompleted: prev.casesCompleted + 1,
+        averageScore: Math.round(((prev.averageScore * prev.casesCompleted) + feedbackResult.score) / (prev.casesCompleted + 1))
+    }));
   };
 
   // ---------------- RENDER ----------------
 
-  if (appState === AppState.DASHBOARD) {
-    return <Dashboard cases={CLINICAL_CASES} onSelectCase={handleSelectCase} />;
+  if (appState === AppState.DASHBOARD_HOME) {
+    return <Dashboard user={userProfile} onNavigate={handleNavigateFromDashboard} />;
   }
 
+  if (appState === AppState.CASE_SELECTION) {
+    return <CaseSelection cases={CLINICAL_CASES} onSelectCase={handleSelectCase} onBack={handleBackToDashboard} />;
+  }
+
+  if (appState === AppState.QUIZ_SECTION) {
+    return <QuizSection onBack={handleBackToDashboard} />;
+  }
+
+  if (appState === AppState.COURSE_SECTION) {
+    return <CourseSection onBack={handleBackToDashboard} />;
+  }
+
+  // --- Feedback View ---
   if (appState === AppState.FEEDBACK && feedback) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 md:p-12 overflow-y-auto">
@@ -184,11 +236,11 @@ const App: React.FC = () => {
             
             <div className="flex justify-end pt-4">
                 <button 
-                    onClick={goBackToDashboard}
+                    onClick={handleBackToCaseSelection}
                     className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
                 >
                     <ArrowLeft size={18}/>
-                    Retour au tableau de bord
+                    Retour aux cas
                 </button>
             </div>
           </div>
@@ -197,11 +249,12 @@ const App: React.FC = () => {
     );
   }
 
+  // --- Consultation View (Chat) ---
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden relative">
       {/* Sidebar - Patient Info & Vitals */}
       <div className="w-80 bg-white border-r border-slate-200 hidden md:flex flex-col p-6 z-10 overflow-y-auto">
-        <button onClick={goBackToDashboard} className="flex items-center text-slate-500 hover:text-teal-600 mb-8 text-sm font-medium transition-colors">
+        <button onClick={handleBackToCaseSelection} className="flex items-center text-slate-500 hover:text-teal-600 mb-8 text-sm font-medium transition-colors">
             <ArrowLeft size={16} className="mr-1"/> Quitter le cas
         </button>
 
