@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { QuizQuestion } from '../types';
 
@@ -10,18 +10,31 @@ interface QuizSectionProps {
 export const QuizSection: React.FC<QuizSectionProps> = ({ onBack }) => {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
 
   useEffect(() => {
-    const loadQuiz = async () => {
-      const data = await geminiService.generateDynamicQuiz();
-      setQuestions(data);
-      setLoading(false);
-    };
     loadQuiz();
   }, []);
+
+  const loadQuiz = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const data = await geminiService.generateDynamicQuiz();
+      if (data && data.length > 0) {
+        setQuestions(data);
+      } else {
+        setError(true);
+      }
+    } catch (e) {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAnswer = (index: number) => {
     if (showResult) return;
@@ -48,7 +61,23 @@ export const QuizSection: React.FC<QuizSectionProps> = ({ onBack }) => {
     );
   }
 
-  if (questions.length === 0) return <div>Erreur de chargement.</div>;
+  if (error || questions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8 text-center">
+        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center">
+          <AlertTriangle size={32} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">Impossible de générer le quiz</h3>
+          <p className="text-slate-500 max-w-md">L'IA de génération est temporairement indisponible ou a rencontré une erreur de format.</p>
+        </div>
+        <div className="flex gap-4">
+          <button onClick={onBack} className="px-6 py-2 border border-slate-200 rounded-lg font-medium hover:bg-slate-50 transition-colors">Retour</button>
+          <button onClick={loadQuiz} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors">Réessayer</button>
+        </div>
+      </div>
+    );
+  }
 
   const currentQ = questions[activeQuestion];
 
