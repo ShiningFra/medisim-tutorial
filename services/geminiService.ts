@@ -1,6 +1,13 @@
-import { GoogleGenAI, GenerateContentResponse, Chat } from "@google/genai";
-import { ClinicalCase, Message, DiagnosisSubmission, TutorFeedback } from '../types';
-import { SYSTEM_INSTRUCTION_PATIENT, SYSTEM_INSTRUCTION_TUTOR } from '../constants';
+import { GoogleGenAI, GenerateContentResponse, Chat, Type } from "@google/genai";
+import { 
+  ClinicalCase, Message, DiagnosisSubmission, TutorFeedback, 
+  QuizQuestion, CourseModule 
+} from '../types';
+import { 
+  SYSTEM_INSTRUCTION_PATIENT, SYSTEM_INSTRUCTION_TUTOR, 
+  SYSTEM_INSTRUCTION_QUIZ, SYSTEM_INSTRUCTION_COURSE,
+  LOCAL_LLM_URL 
+} from '../constants';
 
 const API_KEY = process.env.API_KEY || '';
 
@@ -13,130 +20,122 @@ class GeminiService {
     this.ai = new GoogleGenAI({ apiKey: API_KEY });
   }
 
+  /** 
+   * APPEL AU LLM LOCAL (Modèle Expert de Diagnostic)
+   * Ce modèle sert de guide de vérité pour corriger l'élève.
+   */
+  private async callLocalExpertModel(transcript: string): Promise<string> {
+    if (!LOCAL_LLM_URL) return "LLM Local non configuré.";
+    
+    try {
+      const response = await fetch(LOCAL_LLM_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `En tant qu'expert médical, analyse ce transcript et donne le diagnostic le plus probable : ${transcript}`,
+          stream: false
+        })
+      });
+      const data = await response.json();
+      return data.response || "Erreur de réponse du LLM local.";
+    } catch (e) {
+      console.warn("Échec de connexion au LLM local:", e);
+      return "Indisponible.";
+    }
+  }
+
   public initializeCase(clinicalCase: ClinicalCase) {
     this.currentCase = clinicalCase;
-    
-    // Combine general instructions with specific case scenario
-    const combinedSystemInstruction = `
-      ${SYSTEM_INSTRUCTION_PATIENT}
-      
-      --- PROFIL PATIENT ACTUEL ---
-      Nom: ${clinicalCase.patientProfile.name}
-      Âge: ${clinicalCase.patientProfile.age}
-      Genre: ${clinicalCase.patientProfile.gender}
-      
-      SCÉNARIO SPÉCIFIQUE (CONFIDENTIEL):
-      ${clinicalCase.internalScenario}
-    `;
+    const combinedSystemInstruction = `${SYSTEM_INSTRUCTION_PATIENT}\nPROFIL: ${clinicalCase.patientProfile.name}, ${clinicalCase.patientProfile.age} ans.\nSCÉNARIO: ${clinicalCase.internalScenario}`;
 
     this.patientChat = this.ai.chats.create({
       model: 'gemini-2.5-flash',
-      config: {
-        systemInstruction: combinedSystemInstruction,
-        temperature: 0.7, // A bit of creativity for realistic roleplay
-      },
+      config: { systemInstruction: combinedSystemInstruction, temperature: 0.7 },
     });
   }
 
   public async sendMessageToPatient(userMessage: string): Promise<string> {
-    if (!this.patientChat) {
-      throw new Error("Consultation not initialized");
-    }
-
+    if (!this.patientChat) throw new Error("Consultation not initialized");
     try {
-      const response: GenerateContentResponse = await this.patientChat.sendMessage({
-        message: userMessage
-      });
-      return response.text || "Je ne sais pas comment répondre à cela.";
+      const response: GenerateContentResponse = await this.patientChat.sendMessage({ message: userMessage });
+      return response.text || "Pas de réponse.";
     } catch (error) {
-      console.error("Error sending message to patient:", error);
-      return "Désolé, je ne me sens pas très bien... (Erreur de simulation)";
+      return "Erreur de communication.";
     }
   }
 
-  public async getTutorFeedback(
-    chatHistory: Message[],
-    submission: DiagnosisSubmission
-  ): Promise<TutorFeedback> {
-    if (!this.currentCase) {
-      throw new Error("No active case");
-    }
-
-    // Prepare the transcript for the Tutor
-    const transcript = chatHistory
-      .map(m => `${m.role.toUpperCase()}: ${m.text}`)
-      .join('\n');
+  public async getTutorFeedback(chatHistory: Message[], submission: DiagnosisSubmission): Promise<TutorFeedback> {
+    if (!this.currentCase) throw new Error("No active case");
+    const transcript = chatHistory.map(m => `${m.role}: ${m.text}`).join('\n');
+    
+    // Appel au LLM Local pour obtenir son "avis expert" pour la correction
+    const localExpertOpinion = await this.callLocalExpertModel(transcript);
 
     const prompt = `
-      --- DONNÉES DU CAS ---
-      Cas: ${this.currentCase.title}
-      Diagnostic Réel: ${this.currentCase.correctDiagnosis}
+      Diagnostic Réel attendu: ${this.currentCase.correctDiagnosis}
+      Avis du LLM Expert Local: ${localExpertOpinion}
       
-      --- TRANSCRIPT CONSULTATION ---
-      ${transcript}
+      Transcript: ${transcript}
+      Soumission Élève: ${submission.mainDiagnosis} (${submission.reasoning})
       
-      --- SOUMISSION ÉTUDIANT ---
-      Diagnostic proposé: ${submission.mainDiagnosis}
-      Raisonnement: ${submission.reasoning}
-      
-      Génère le rapport d'évaluation au format JSON STRICT.
+      Évalue l'élève en comparant avec l'avis expert.
     `;
 
     try {
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash', // Using flash for speed, sufficient for structured feedback
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION_TUTOR,
           responseMimeType: "application/json",
         }
       });
-
-      const jsonText = response.text || "{}";
-      const feedback = JSON.parse(jsonText) as TutorFeedback;
-      return feedback;
-
+      return JSON.parse(response.text || "{}") as TutorFeedback;
     } catch (error) {
-      console.error("Error getting tutor feedback:", error);
-      return {
-        score: 0,
-        strengths: [],
-        weaknesses: ["Erreur lors de la génération du feedback."],
-        missedQuestions: [],
-        finalComment: "Une erreur technique a empêché l'évaluation par le tuteur IA."
-      };
+      return { score: 0, strengths: [], weaknesses: ["Erreur évaluation"], missedQuestions: [], finalComment: "Erreur technique." };
     }
   }
-  
+
+  public async generateDynamicQuiz(): Promise<QuizQuestion[]> {
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: "Génère un nouveau quiz.",
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION_QUIZ,
+          responseMimeType: "application/json",
+        }
+      });
+      return JSON.parse(response.text || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  public async generateDynamicCourses(): Promise<CourseModule[]> {
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: "Génère les modules de cours.",
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION_COURSE,
+          responseMimeType: "application/json",
+        }
+      });
+      return JSON.parse(response.text || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
   public async getHint(chatHistory: Message[]): Promise<string> {
-      if (!this.currentCase) return "Aucun cas actif.";
-      
-      const transcript = chatHistory
-      .map(m => `${m.role.toUpperCase()}: ${m.text}`)
-      .join('\n');
-      
-      const prompt = `
-        L'étudiant est bloqué. Analyse la conversation ci-dessous.
-        Sans donner la réponse (Diagnostic: ${this.currentCase.correctDiagnosis}),
-        donne un indice subtil ou suggère une direction d'investigation (examen clinique ou question d'anamnèse) qu'il a négligé.
-        Sois bref (1 phrase).
-        
-        Transcript:
-        ${transcript}
-      `;
-      
-      try {
-           const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: "Tu es un mentor médical qui aide un étudiant bloqué. Ne donne jamais la réponse directement."
-            }
-          });
-          return response.text || "Essayez de revoir les constantes vitales.";
-      } catch (e) {
-          return "Concentrez-vous sur la plainte principale.";
-      }
+    if (!this.currentCase) return "Indice non disponible.";
+    const transcript = chatHistory.map(m => `${m.role}: ${m.text}`).join('\n');
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-2.5-flash-lite-latest',
+      contents: `Donne un indice subtil sans dire le diagnostic (${this.currentCase.correctDiagnosis}) pour ce transcript: ${transcript}`
+    });
+    return response.text || "Pensez à l'examen physique.";
   }
 }
 

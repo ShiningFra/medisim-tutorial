@@ -12,7 +12,6 @@ export interface ClinicalCase {
     chiefComplaint: string;
     vitals: Vitals;
   };
-  // Hidden from user, used for prompting the Patient Persona
   internalScenario: string;
   correctDiagnosis: string;
 }
@@ -30,12 +29,11 @@ export interface Message {
   role: 'user' | 'model' | 'system';
   text: string;
   timestamp: Date;
-  isThinking?: boolean;
 }
 
 export interface UserProfile {
   name: string;
-  level: string; // ex: "Externe", "Interne", "Résident"
+  level: string;
   xp: number;
   maxXp: number;
   casesCompleted: number;
@@ -43,12 +41,12 @@ export interface UserProfile {
 }
 
 export enum AppState {
-  DASHBOARD_HOME,    // Le nouveau hub central
-  CASE_SELECTION,    // La liste des cas (ancien dashboard)
-  CONSULTATION,      // Le chat
-  FEEDBACK,          // Résultats
-  QUIZ_SECTION,      // Nouvelle section
-  COURSE_SECTION     // Nouvelle section
+  DASHBOARD_HOME,
+  CASE_SELECTION,
+  CONSULTATION,
+  FEEDBACK,
+  QUIZ_SECTION,
+  COURSE_SECTION
 }
 
 export interface DiagnosisSubmission {
@@ -62,4 +60,17 @@ export interface TutorFeedback {
   weaknesses: string[];
   missedQuestions: string[];
   finalComment: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correct: number;
+  explanation: string;
+}
+
+export interface CourseModule {
+  title: string;
+  description: string;
+  keyPoint: string;
 }
