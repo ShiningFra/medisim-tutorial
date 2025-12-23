@@ -9,7 +9,7 @@ const app = express();
 const port = 3000;
 
 // Configuration IA - Utilise la clé API de l'environnement
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.GOOGLE_API_KEY;
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 app.use(cors());
