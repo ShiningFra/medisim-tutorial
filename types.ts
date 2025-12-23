@@ -1,3 +1,4 @@
+
 export interface ClinicalCase {
   id: string;
   title: string;
@@ -34,7 +35,9 @@ export interface Message {
 export interface UserProfile {
   name: string;
   level: string;
+  levelNumber: number;
   xp: number;
+  totalXp: number;
   maxXp: number;
   casesCompleted: number;
   averageScore: number;
